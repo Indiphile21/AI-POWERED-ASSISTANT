@@ -38,21 +38,47 @@ class ChatAuthError extends Error {
 }
 
 type AuthUiState = "idle" | "authenticating" | "connecting" | "session-expired";
+const TOKEN_REFRESH_WINDOW_MS = 60_000;
 
 async function getFreshChatAccessToken() {
   console.info("[Chat Auth] Checking current session before chat request");
   const { data, error } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
+  let session = data.session;
+  let token = session?.access_token;
+  const expiresAtMs = session?.expires_at ? session.expires_at * 1000 : null;
+  const shouldRefresh = !token || (expiresAtMs !== null && expiresAtMs - Date.now() < TOKEN_REFRESH_WINDOW_MS);
 
   console.info("[Chat Auth] Session status", {
-    hasSession: Boolean(data.session),
+    hasSession: Boolean(session),
     hasToken: Boolean(token),
-    expiresAt: data.session?.expires_at ?? null,
+    expiresAt: session?.expires_at ?? null,
+    shouldRefresh,
   });
 
   if (error) {
     console.warn("[Chat Auth] Session lookup failed", { message: error.message });
     throw new ChatAuthError();
+  }
+
+  if (shouldRefresh) {
+    console.info("[Chat Auth] Refreshing session before chat request", {
+      reason: token ? "token_near_expiry" : "missing_token",
+    });
+    const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+    session = refreshData.session;
+    token = session?.access_token;
+
+    console.info("[Chat Auth] Pre-request refresh status", {
+      hasSession: Boolean(session),
+      hasToken: Boolean(token),
+      hasError: Boolean(refreshError),
+      expiresAt: session?.expires_at ?? null,
+    });
+
+    if (refreshError) {
+      console.warn("[Chat Auth] Pre-request refresh failed", { message: refreshError.message });
+      throw new ChatAuthError();
+    }
   }
 
   if (!token) {
