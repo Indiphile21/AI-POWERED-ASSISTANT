@@ -6,7 +6,7 @@ import { DefaultChatTransport } from "ai";
 import { getThread } from "@/lib/threads.functions";
 import { TOOL_PRESETS, type ToolKey } from "@/lib/system-prompt";
 import { supabase } from "@/integrations/supabase/client";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
   Conversation,
   ConversationContent,
@@ -81,25 +81,20 @@ function ChatWindow({
   onActivity: () => void;
 }) {
   const preset = TOOL_PRESETS[tool];
-  const [token, setToken] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setToken(data.session?.access_token ?? null));
-  }, []);
 
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
         api: "/api/chat",
-        headers: () => {
-          const h: Record<string, string> = {};
-          if (token) h.Authorization = `Bearer ${token}`;
-          return h;
+        headers: async (): Promise<Record<string, string>> => {
+          const { data } = await supabase.auth.getSession();
+          const token = data.session?.access_token;
+          return token ? { Authorization: `Bearer ${token}` } : {};
         },
         body: { threadId, tool },
       }),
-    [token, threadId, tool],
+    [threadId, tool],
   );
 
   const { messages, sendMessage, status, error } = useChat({
