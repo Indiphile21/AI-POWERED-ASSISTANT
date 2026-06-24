@@ -4,10 +4,11 @@ import { z } from "zod";
 
 const ToolKey = z.enum(["chat", "email", "meeting", "planner", "research"]);
 
+export type StoredMessagePart = { type: string; text?: string };
 export type StoredMessage = {
   id: string;
   role: "user" | "assistant" | "system";
-  parts: Array<{ type: string; text?: string; [k: string]: unknown }>;
+  parts: StoredMessagePart[];
 };
 
 export const listThreads = createServerFn({ method: "GET" })
