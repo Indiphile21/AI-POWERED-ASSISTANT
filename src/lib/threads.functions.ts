@@ -2,6 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 
+const ToolKey = z.enum(["chat", "email", "meeting", "planner", "research"]);
+
 export type StoredMessage = {
   id: string;
   role: "user" | "assistant" | "system";
