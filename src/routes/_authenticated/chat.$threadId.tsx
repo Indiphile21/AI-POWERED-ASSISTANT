@@ -6,7 +6,7 @@ import { DefaultChatTransport } from "ai";
 import { getThread } from "@/lib/threads.functions";
 import { TOOL_PRESETS, type ToolKey } from "@/lib/system-prompt";
 import { supabase } from "@/integrations/supabase/client";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
   Conversation,
   ConversationContent,
