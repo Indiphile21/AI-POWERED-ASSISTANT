@@ -4,6 +4,7 @@ import { createLovableAiGatewayProvider } from "@/lib/ai-gateway.server";
 import { buildSystemPrompt, type ToolKey } from "@/lib/system-prompt";
 
 type ChatBody = { messages?: UIMessage[]; tool?: ToolKey; threadId?: string };
+type BearerTokenResult = { ok: true; token: string } | { ok: false; response: Response };
 
 function textResponse(message: string, status: number) {
   return new Response(message, {
@@ -17,7 +18,7 @@ function authFailure(reason: string, message: string, status = 401) {
   return textResponse(message, status);
 }
 
-function getBearerToken(request: Request) {
+function getBearerToken(request: Request): BearerTokenResult {
   const authHeader = request.headers.get("authorization");
   console.info("[Chat API Auth] Authorization header status", {
     hasHeader: Boolean(authHeader),
@@ -25,6 +26,7 @@ function getBearerToken(request: Request) {
 
   if (!authHeader) {
     return {
+      ok: false,
       token: null,
       response: authFailure(
         "missing_authorization_header",
@@ -36,6 +38,7 @@ function getBearerToken(request: Request) {
   const match = authHeader.match(/^Bearer\s+(.+)$/i);
   if (!match) {
     return {
+      ok: false,
       token: null,
       response: authFailure(
         "malformed_authorization_header",
@@ -47,6 +50,7 @@ function getBearerToken(request: Request) {
   const token = match[1]?.trim();
   if (!token || token.includes(" ")) {
     return {
+      ok: false,
       token: null,
       response: authFailure("empty_bearer_token", "Authentication required: Bearer token is empty."),
     };
@@ -54,6 +58,7 @@ function getBearerToken(request: Request) {
 
   if (token.split(".").length !== 3) {
     return {
+      ok: false,
       token: null,
       response: authFailure(
         "invalid_token_shape",
@@ -63,7 +68,7 @@ function getBearerToken(request: Request) {
   }
 
   console.info("[Chat API Auth] Bearer token present", { hasToken: true });
-  return { token, response: null };
+  return { ok: true, token };
 }
 
 export const Route = createFileRoute("/api/chat")({
@@ -94,13 +99,14 @@ export const Route = createFileRoute("/api/chat")({
             missing: "LOVABLE_API_KEY",
           });
           return textResponse(
-            "AI service is not configured. Add LOVABLE_API_KEY to the backend environment and retry.",
+            "AI service is not configured for this deployment. Reconnect the AI gateway and retry.",
             500,
           );
         }
 
-        const { token, response: authResponse } = getBearerToken(request);
-        if (!token) return authResponse;
+        const authResult = getBearerToken(request);
+        if (!authResult.ok) return authResult.response;
+        const token = authResult.token;
 
         // Verify user + persist messages via service-role client
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
