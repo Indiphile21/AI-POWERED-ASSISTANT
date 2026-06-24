@@ -27,7 +27,6 @@ function getBearerToken(request: Request): BearerTokenResult {
   if (!authHeader) {
     return {
       ok: false,
-      token: null,
       response: authFailure(
         "missing_authorization_header",
         "Authentication required: missing Authorization header.",
@@ -39,7 +38,6 @@ function getBearerToken(request: Request): BearerTokenResult {
   if (!match) {
     return {
       ok: false,
-      token: null,
       response: authFailure(
         "malformed_authorization_header",
         "Authentication required: malformed Authorization header. Expected a Bearer token.",
@@ -51,7 +49,6 @@ function getBearerToken(request: Request): BearerTokenResult {
   if (!token || token.includes(" ")) {
     return {
       ok: false,
-      token: null,
       response: authFailure("empty_bearer_token", "Authentication required: Bearer token is empty."),
     };
   }
@@ -59,7 +56,6 @@ function getBearerToken(request: Request): BearerTokenResult {
   if (token.split(".").length !== 3) {
     return {
       ok: false,
-      token: null,
       response: authFailure(
         "invalid_token_shape",
         "Authentication required: Bearer token is malformed.",
