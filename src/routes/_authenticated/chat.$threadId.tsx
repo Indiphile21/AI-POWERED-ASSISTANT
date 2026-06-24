@@ -81,25 +81,20 @@ function ChatWindow({
   onActivity: () => void;
 }) {
   const preset = TOOL_PRESETS[tool];
-  const [token, setToken] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setToken(data.session?.access_token ?? null));
-  }, []);
 
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
         api: "/api/chat",
-        headers: () => {
-          const h: Record<string, string> = {};
-          if (token) h.Authorization = `Bearer ${token}`;
-          return h;
+        headers: async () => {
+          const { data } = await supabase.auth.getSession();
+          const token = data.session?.access_token;
+          return token ? { Authorization: `Bearer ${token}` } : {};
         },
         body: { threadId, tool },
       }),
-    [token, threadId, tool],
+    [threadId, tool],
   );
 
   const { messages, sendMessage, status, error } = useChat({
