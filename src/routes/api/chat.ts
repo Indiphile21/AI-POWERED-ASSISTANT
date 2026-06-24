@@ -48,7 +48,7 @@ export const Route = createFileRoute("/api/chat")({
             thread_id: threadId,
             user_id: userId,
             role: "user",
-            parts: last.parts as unknown as object,
+            parts: last.parts as unknown as never,
           });
           // Update thread title from first user text if still default
           const firstText =
@@ -84,7 +84,7 @@ export const Route = createFileRoute("/api/chat")({
                 thread_id: threadId,
                 user_id: userId,
                 role: "assistant",
-                parts: responseMessage.parts as unknown as object,
+                parts: responseMessage.parts as unknown as never,
               });
               await supabaseAdmin
                 .from("threads")

@@ -60,10 +60,10 @@ export const getThread = createServerFn({ method: "GET" })
       .order("created_at", { ascending: true });
     if (mErr) throw new Error(mErr.message);
 
-    const messages: UIMessage[] = (rows ?? []).map((r) => ({
+    const messages: StoredMessage[] = (rows ?? []).map((r) => ({
       id: r.id,
-      role: r.role as UIMessage["role"],
-      parts: r.parts as UIMessage["parts"],
+      role: r.role as StoredMessage["role"],
+      parts: r.parts as StoredMessage["parts"],
     }));
     return { thread, messages };
   });

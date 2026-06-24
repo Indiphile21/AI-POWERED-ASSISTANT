@@ -92,7 +92,11 @@ function ChatWindow({
     () =>
       new DefaultChatTransport({
         api: "/api/chat",
-        headers: () => (token ? { Authorization: `Bearer ${token}` } : {}),
+        headers: () => {
+          const h: Record<string, string> = {};
+          if (token) h.Authorization = `Bearer ${token}`;
+          return h;
+        },
         body: { threadId, tool },
       }),
     [token, threadId, tool],
@@ -135,7 +139,7 @@ function ChatWindow({
           ) : (
             messages.map((m) => (
               <Message key={m.id} from={m.role}>
-                <MessageContent variant={m.role === "user" ? "contained" : "flat"}>
+                <MessageContent>
                   {m.parts.map((part, i) => {
                     if (part.type === "text") {
                       return m.role === "assistant" ? (
@@ -154,7 +158,7 @@ function ChatWindow({
           )}
           {status === "submitted" && (
             <Message from="assistant">
-              <MessageContent variant="flat">
+              <MessageContent>
                 <Shimmer>Thinking…</Shimmer>
               </MessageContent>
             </Message>
