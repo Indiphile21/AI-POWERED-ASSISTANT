@@ -104,7 +104,7 @@ function ChatWindow({
 
   const { messages, sendMessage, status, error } = useChat({
     id: threadId,
-    messages: initial as unknown as Parameters<typeof useChat>[0] extends infer P ? P extends { messages?: infer M } ? M : never : never,
+    messages: initial as never,
     transport,
     onError: (e) => toast.error(e.message || "Something went wrong"),
     onFinish: () => onActivity(),
