@@ -5,30 +5,118 @@ import { buildSystemPrompt, type ToolKey } from "@/lib/system-prompt";
 
 type ChatBody = { messages?: UIMessage[]; tool?: ToolKey; threadId?: string };
 
+function textResponse(message: string, status: number) {
+  return new Response(message, {
+    status,
+    headers: { "Content-Type": "text/plain; charset=utf-8" },
+  });
+}
+
+function authFailure(reason: string, message: string, status = 401) {
+  console.warn("[Chat API Auth] Authentication failure", { reason, status });
+  return textResponse(message, status);
+}
+
+function getBearerToken(request: Request) {
+  const authHeader = request.headers.get("authorization");
+  console.info("[Chat API Auth] Authorization header status", {
+    hasHeader: Boolean(authHeader),
+  });
+
+  if (!authHeader) {
+    return {
+      token: null,
+      response: authFailure(
+        "missing_authorization_header",
+        "Authentication required: missing Authorization header.",
+      ),
+    };
+  }
+
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  if (!match) {
+    return {
+      token: null,
+      response: authFailure(
+        "malformed_authorization_header",
+        "Authentication required: malformed Authorization header. Expected a Bearer token.",
+      ),
+    };
+  }
+
+  const token = match[1]?.trim();
+  if (!token || token.includes(" ")) {
+    return {
+      token: null,
+      response: authFailure("empty_bearer_token", "Authentication required: Bearer token is empty."),
+    };
+  }
+
+  if (token.split(".").length !== 3) {
+    return {
+      token: null,
+      response: authFailure(
+        "invalid_token_shape",
+        "Authentication required: Bearer token is malformed.",
+      ),
+    };
+  }
+
+  console.info("[Chat API Auth] Bearer token present", { hasToken: true });
+  return { token, response: null };
+}
+
 export const Route = createFileRoute("/api/chat")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const body = (await request.json()) as ChatBody;
+        let body: ChatBody;
+        try {
+          body = (await request.json()) as ChatBody;
+        } catch (error) {
+          console.warn("[Chat API] Invalid JSON body", { error });
+          return textResponse("Invalid JSON request body.", 400);
+        }
+
+        console.info("[Chat API] Request received", {
+          hasMessages: Array.isArray(body.messages),
+          messageCount: Array.isArray(body.messages) ? body.messages.length : 0,
+          hasThreadId: Boolean(body.threadId),
+        });
+
         if (!Array.isArray(body.messages)) {
-          return new Response("Messages required", { status: 400 });
+          return textResponse("Messages required", 400);
         }
 
         const key = process.env.LOVABLE_API_KEY;
-        if (!key) return new Response("Missing LOVABLE_API_KEY", { status: 500 });
+        if (!key) {
+          console.error("[Chat API] Missing AI gateway configuration", {
+            missing: "LOVABLE_API_KEY",
+          });
+          return textResponse(
+            "AI service is not configured. Add LOVABLE_API_KEY to the backend environment and retry.",
+            500,
+          );
+        }
 
-        const authHeader = request.headers.get("authorization");
-        const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
-        if (!token) return new Response("Unauthorized", { status: 401 });
+        const { token, response: authResponse } = getBearerToken(request);
+        if (!token) return authResponse;
 
         // Verify user + persist messages via service-role client
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
         const { data: userData, error: userErr } = await supabaseAdmin.auth.getUser(token);
-        if (userErr || !userData.user) return new Response("Unauthorized", { status: 401 });
+        if (userErr || !userData.user) {
+          console.warn("[Chat API Auth] Token verification failed", {
+            hasUser: Boolean(userData.user),
+            error: userErr?.message ?? null,
+          });
+          return authFailure("token_verification_failed", "Authentication required: token is invalid or expired.");
+        }
         const userId = userData.user.id;
+        console.info("[Chat API Auth] Token verified", { hasUserId: Boolean(userId) });
 
         const threadId = body.threadId;
-        if (!threadId) return new Response("threadId required", { status: 400 });
+        if (!threadId) return textResponse("threadId required", 400);
 
         // Verify thread ownership
         const { data: thread } = await supabaseAdmin
@@ -37,7 +125,10 @@ export const Route = createFileRoute("/api/chat")({
           .eq("id", threadId)
           .maybeSingle();
         if (!thread || thread.user_id !== userId) {
-          return new Response("Forbidden", { status: 403 });
+          console.warn("[Chat API Auth] Thread ownership check failed", {
+            hasThread: Boolean(thread),
+          });
+          return authFailure("thread_forbidden", "Forbidden: you do not have access to this chat.", 403);
         }
         const tool = (body.tool ?? thread.tool ?? "chat") as ToolKey;
 
@@ -70,6 +161,11 @@ export const Route = createFileRoute("/api/chat")({
         }
 
         const gateway = createLovableAiGatewayProvider(key);
+        console.info("[Chat API] Starting AI stream", {
+          threadId,
+          tool,
+          messageCount: body.messages.length,
+        });
         const result = streamText({
           model: gateway("google/gemini-3-flash-preview"),
           system: buildSystemPrompt(tool),
